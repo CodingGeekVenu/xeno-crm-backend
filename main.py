@@ -188,7 +188,7 @@ async def launch_campaign(request: CampaignRequest, background_tasks: Background
             "customer_id": customer_id,
             "message": request.message_template,
             "channel": request.channel,
-            "webhook_url": "http://localhost:8000/api/webhooks/channel"
+            "webhook_url": os.environ.get("CRM_WEBHOOK_URL", "https://xeno-crm-backend-itr8.onrender.com/api/webhooks/channel")
         }
         
         # Fire in background so the CRM API doesn't block
