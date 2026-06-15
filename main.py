@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import sqlite3
@@ -6,6 +7,14 @@ import requests
 import json
 
 app = FastAPI(title="Xeno AI-Native Mini CRM")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], 
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Configuration for Local Ollama
 OLLAMA_URL = "http://localhost:11434/api/generate"
@@ -16,6 +25,9 @@ CHANNEL_SERVICE_URL = "http://localhost:8001/send"
 # --- Pydantic Models for API Validation ---
 class ChatRequest(BaseModel):
     prompt: str
+
+class RewriteRequest(BaseModel):
+    text: str
 
 class CampaignRequest(BaseModel):
     name: str
@@ -50,6 +62,7 @@ def generate_sql_from_prompt(prompt: str) -> str:
     1. Return ONLY the raw SQL query. No markdown formatting, no backticks, no explanations.
     2. Always SELECT DISTINCT customers.id, customers.name, customers.email, customers.location
     3. Use standard SQLite syntax.
+    4. CRITICAL: If the user's request is just a greeting (e.g., "hi", "hello") or completely unrelated to finding customers, return EXACTLY the string "INVALID_PROMPT" and nothing else.
     """
 
     payload = {
@@ -77,10 +90,62 @@ def generate_sql_from_prompt(prompt: str) -> str:
 
 # --- API Routes ---
 
+# --- Additional Pydantic Models ---
+class Customer(BaseModel):
+    name: str
+    email: str
+    phone: str
+    location: str
+
+class Order(BaseModel):
+    customer_id: int
+    product_name: str
+    amount: float
+
+# --- Data Ingestion API Routes ---
+@app.get("/api/customers")
+async def get_customers():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM customers ORDER BY id DESC LIMIT 100")
+    customers = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return customers
+
+@app.post("/api/customers", status_code=201)
+async def create_customer(customer: Customer):
+    """Simulates webhook ingestion from a Shopify/POS system"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO customers (name, email, phone, location, created_at) VALUES (?, ?, ?, ?, datetime('now'))",
+        (customer.name, customer.email, customer.phone, customer.location)
+    )
+    customer_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return {"message": "Customer ingested", "id": customer_id}
+
+@app.post("/api/orders", status_code=201)
+async def create_order(order: Order):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO orders (customer_id, product_name, amount, order_date) VALUES (?, ?, ?, datetime('now'))",
+        (order.customer_id, order.product_name, order.amount)
+    )
+    order_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return {"message": "Order ingested", "id": order_id}
+
 @app.post("/api/segment")
 async def create_segment(request: ChatRequest):
     """AI-Native Segmentation: Chat to Audience"""
     sql_query = generate_sql_from_prompt(request.prompt)
+    
+    if sql_query == "INVALID_PROMPT":
+         raise HTTPException(status_code=400, detail="I am an AI Segmentation Builder. Please ask me to find a specific audience.")
     
     try:
         conn = get_db_connection()
@@ -159,6 +224,24 @@ async def channel_receipt(payload: WebhookPayload):
     conn.commit()
     conn.close()
     return {"status": "acknowledged"}
+
+@app.post("/api/rewrite")
+async def rewrite_message(request: RewriteRequest):
+    """Real AI Rewrite using the local LLM."""
+    system_prompt = "You are an expert marketing copywriter. Rewrite the following message to be more engaging, conversational, and conversion-focused. Keep it under 3 sentences. Do not include any explanations or markdown, just return the rewritten text."
+    
+    payload = {
+        "model": MODEL_NAME,
+        "prompt": f"{system_prompt}\n\nOriginal: {request.text}",
+        "stream": False
+    }
+
+    try:
+        response = requests.post(OLLAMA_URL, json=payload)
+        response.raise_for_status()
+        return {"rewritten_text": response.json().get("response", "").strip()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"LLM Error: {str(e)}")
 
 # --- Basic Analytics Route ---
 @app.get("/api/analytics")
