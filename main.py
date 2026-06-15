@@ -22,7 +22,7 @@ app.add_middleware(
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 llm_model = genai.GenerativeModel('gemini-1.5-flash')
 # We will set this up in the next step
-CHANNEL_SERVICE_URL = "http://localhost:8001/send" 
+CHANNEL_SERVICE_URL = "https://xeno-channel-service-9lsx.onrender.com/send" 
 
 # --- Pydantic Models for API Validation ---
 class ChatRequest(BaseModel):
