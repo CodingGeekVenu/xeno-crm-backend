@@ -171,6 +171,18 @@ async def launch_campaign(request: CampaignRequest, background_tasks: Background
     )
     campaign_id = cursor.lastrowid
     
+    # Fire in background so the CRM API doesn't block
+    def dispatch_to_channel(data):
+        try:
+            print(f"DEBUG: Attempting to reach {CHANNEL_SERVICE_URL} for comm_id {data['communication_id']}")
+            response = requests.post(CHANNEL_SERVICE_URL, json=data, timeout=10)
+            if response.status_code != 202:
+                print(f"DEBUG: Channel Service ERROR! Status: {response.status_code}, Response: {response.text}")
+            else:
+                print(f"DEBUG: Success! Channel Service accepted comm_id {data['communication_id']}")
+        except Exception as e:
+            print(f"DEBUG: CRITICAL DISPATCH ERROR: {str(e)}")
+
     # 2. Log Pending Communications & Dispatch
     communications_created = 0
     for customer_id in request.customer_ids:
@@ -190,16 +202,6 @@ async def launch_campaign(request: CampaignRequest, background_tasks: Background
             "channel": request.channel,
             "webhook_url": os.environ.get("CRM_WEBHOOK_URL", "https://xeno-crm-backend-itr8.onrender.com/api/webhooks/channel")
         }
-        
-        # Fire in background so the CRM API doesn't block
-        def dispatch_to_channel(data):
-            try:
-                response = requests.post(CHANNEL_SERVICE_URL, json=data, timeout=5)
-                # Check if the channel service actually accepted it
-                if response.status_code != 202:
-                    print(f"DEBUG: Channel Service rejected request! Status: {response.status_code}, Body: {response.text}")
-            except Exception as e:
-                print(f"DEBUG: Critical failure dispatching to Channel Service: {str(e)}")
 
         background_tasks.add_task(dispatch_to_channel, payload)
 
