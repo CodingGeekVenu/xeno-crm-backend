@@ -72,12 +72,15 @@ def generate_sql_from_prompt(prompt: str) -> str:
         response = llm_model.generate_content(f"{system_prompt}\n\nUser Request: {prompt}")
         raw_sql = response.text.strip()
         
-        # Clean up markdown if it exists
-        if raw_sql.startswith("```sql"):
-            raw_sql = raw_sql[6:-3].strip()
-        elif raw_sql.startswith("```"):
-            raw_sql = raw_sql[3:-3].strip()
-            
+        # Robust cleaning for any markdown wrappers
+        if "```sql" in raw_sql:
+            raw_sql = raw_sql.split("```sql")[1].split("```")[0].strip()
+        elif "```" in raw_sql:
+            raw_sql = raw_sql.split("```")[1].split("```")[0].strip()
+        
+        # Remove any trailing or leading semicolons that might cause issues
+        raw_sql = raw_sql.rstrip(";")
+        
         return raw_sql
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM Error: {str(e)}")
