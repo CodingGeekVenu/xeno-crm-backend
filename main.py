@@ -68,7 +68,7 @@ def generate_sql_from_prompt(prompt: str) -> str:
 
     try:
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-3.1-flash-lite',
             contents=f"{system_prompt}\n\nUser Request: {prompt}"
         )
         raw_sql = response.text.strip()
@@ -227,7 +227,7 @@ async def rewrite_message(request: RewriteRequest):
     
     try:
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-3.1-flash-lite',
             contents=f"{system_prompt}\n\nOriginal: {request.text}"
         )
         return {"rewritten_text": response.text.strip()}
