@@ -6,7 +6,7 @@ import sqlite3
 import requests
 import json
 import os
-import google.generativeai as genai
+from google import genai
 
 app = FastAPI(title="Xeno AI-Native Mini CRM")
 
@@ -19,8 +19,7 @@ app.add_middleware(
 )
 
 # Configure Gemini via Environment Variable
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-llm_model = genai.GenerativeModel('gemini-pro')
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 # We will set this up in the next step
 CHANNEL_SERVICE_URL = "https://xeno-channel-service-9lsx.onrender.com/send" 
 
@@ -68,20 +67,18 @@ def generate_sql_from_prompt(prompt: str) -> str:
     """
 
     try:
-        # Ask Gemini to generate the SQL
-        response = llm_model.generate_content(f"{system_prompt}\n\nUser Request: {prompt}")
+        response = client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=f"{system_prompt}\n\nUser Request: {prompt}"
+        )
         raw_sql = response.text.strip()
         
-        # Robust cleaning for any markdown wrappers
         if "```sql" in raw_sql:
             raw_sql = raw_sql.split("```sql")[1].split("```")[0].strip()
         elif "```" in raw_sql:
             raw_sql = raw_sql.split("```")[1].split("```")[0].strip()
-        
-        # Remove any trailing or leading semicolons that might cause issues
-        raw_sql = raw_sql.rstrip(";")
-        
-        return raw_sql
+            
+        return raw_sql.rstrip(";")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM Error: {str(e)}")
 
@@ -229,7 +226,10 @@ async def rewrite_message(request: RewriteRequest):
     system_prompt = "You are an expert marketing copywriter. Rewrite the following message to be more engaging, conversational, and conversion-focused. Keep it under 3 sentences. Do not include any explanations or markdown, just return the rewritten text."
     
     try:
-        response = llm_model.generate_content(f"{system_prompt}\n\nOriginal: {request.text}")
+        response = client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=f"{system_prompt}\n\nOriginal: {request.text}"
+        )
         return {"rewritten_text": response.text.strip()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM Error: {str(e)}")
