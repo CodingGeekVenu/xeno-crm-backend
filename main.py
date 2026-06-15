@@ -5,6 +5,8 @@ from typing import List, Optional
 import sqlite3
 import requests
 import json
+import os
+import google.generativeai as genai
 
 app = FastAPI(title="Xeno AI-Native Mini CRM")
 
@@ -16,9 +18,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configuration for Local Ollama
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "qwen2.5-coder:7b"
+# Configure Gemini via Environment Variable
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+llm_model = genai.GenerativeModel('gemini-1.5-flash')
 # We will set this up in the next step
 CHANNEL_SERVICE_URL = "http://localhost:8001/send" 
 
@@ -65,24 +67,17 @@ def generate_sql_from_prompt(prompt: str) -> str:
     4. CRITICAL: If the user's request is just a greeting (e.g., "hi", "hello") or completely unrelated to finding customers, return EXACTLY the string "INVALID_PROMPT" and nothing else.
     """
 
-    payload = {
-        "model": MODEL_NAME,
-        "prompt": f"{system_prompt}\n\nUser Request: {prompt}",
-        "stream": False,
-        "options": {
-            "temperature": 0.0 # Keep it strictly factual for coding
-        }
-    }
-
     try:
-        response = requests.post(OLLAMA_URL, json=payload)
-        response.raise_for_status()
-        raw_sql = response.json().get("response", "").strip()
+        # Ask Gemini to generate the SQL
+        response = llm_model.generate_content(f"{system_prompt}\n\nUser Request: {prompt}")
+        raw_sql = response.text.strip()
         
-        # Clean up any accidental markdown the model might output despite instructions
+        # Clean up markdown if it exists
         if raw_sql.startswith("```sql"):
             raw_sql = raw_sql[6:-3].strip()
-        
+        elif raw_sql.startswith("```"):
+            raw_sql = raw_sql[3:-3].strip()
+            
         return raw_sql
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM Error: {str(e)}")
@@ -230,16 +225,9 @@ async def rewrite_message(request: RewriteRequest):
     """Real AI Rewrite using the local LLM."""
     system_prompt = "You are an expert marketing copywriter. Rewrite the following message to be more engaging, conversational, and conversion-focused. Keep it under 3 sentences. Do not include any explanations or markdown, just return the rewritten text."
     
-    payload = {
-        "model": MODEL_NAME,
-        "prompt": f"{system_prompt}\n\nOriginal: {request.text}",
-        "stream": False
-    }
-
     try:
-        response = requests.post(OLLAMA_URL, json=payload)
-        response.raise_for_status()
-        return {"rewritten_text": response.json().get("response", "").strip()}
+        response = llm_model.generate_content(f"{system_prompt}\n\nOriginal: {request.text}")
+        return {"rewritten_text": response.text.strip()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM Error: {str(e)}")
 
