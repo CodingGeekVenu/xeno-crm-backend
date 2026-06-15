@@ -12,7 +12,7 @@ app = FastAPI(title="Xeno AI-Native Mini CRM")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=["*"],  # Allows your GitHub Pages domain to talk to Render
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
