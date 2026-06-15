@@ -20,7 +20,7 @@ app.add_middleware(
 
 # Configure Gemini via Environment Variable
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-llm_model = genai.GenerativeModel('gemini-1.5-flash')
+llm_model = genai.GenerativeModel('gemini-pro')
 # We will set this up in the next step
 CHANNEL_SERVICE_URL = "https://xeno-channel-service-9lsx.onrender.com/send" 
 
