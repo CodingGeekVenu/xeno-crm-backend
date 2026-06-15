@@ -68,7 +68,7 @@ def generate_sql_from_prompt(prompt: str) -> str:
 
     try:
         response = client.models.generate_content(
-            model='gemini-3.1-flash-lite',
+            model='gemini-3.5-flash',
             contents=f"{system_prompt}\n\nUser Request: {prompt}"
         )
         raw_sql = response.text.strip()
@@ -194,9 +194,12 @@ async def launch_campaign(request: CampaignRequest, background_tasks: Background
         # Fire in background so the CRM API doesn't block
         def dispatch_to_channel(data):
             try:
-                requests.post(CHANNEL_SERVICE_URL, json=data, timeout=2)
-            except requests.exceptions.RequestException:
-                pass # Ignore failures for the scope of this mock dispatch
+                response = requests.post(CHANNEL_SERVICE_URL, json=data, timeout=5)
+                # Check if the channel service actually accepted it
+                if response.status_code != 202:
+                    print(f"DEBUG: Channel Service rejected request! Status: {response.status_code}, Body: {response.text}")
+            except Exception as e:
+                print(f"DEBUG: Critical failure dispatching to Channel Service: {str(e)}")
 
         background_tasks.add_task(dispatch_to_channel, payload)
 
@@ -227,7 +230,7 @@ async def rewrite_message(request: RewriteRequest):
     
     try:
         response = client.models.generate_content(
-            model='gemini-3.1-flash-lite',
+            model='gemini-3.5-flash',
             contents=f"{system_prompt}\n\nOriginal: {request.text}"
         )
         return {"rewritten_text": response.text.strip()}
